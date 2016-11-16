@@ -446,7 +446,11 @@ static int scsicmd_buf_get(Scsi_Cmnd *cmd, void **pbuf)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,23)
 	struct scatterlist *sg;
 	sg = scsi_sglist(cmd);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)
+	*pbuf = kmap_atomic(HPT_SG_PAGE(sg)) + sg->offset;
+#else
 	*pbuf = kmap_atomic(HPT_SG_PAGE(sg), HPT_KMAP_TYPE) + sg->offset;
+#endif
 	buflen = sg->length;
 #else 
 
@@ -476,7 +480,11 @@ static inline void scsicmd_buf_put(struct scsi_cmnd *cmd, void *buf)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,23)
 	struct scatterlist *sg;
 	sg = scsi_sglist(cmd);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)
+	kunmap_atomic((char *)buf - sg->offset);
+#else
 	kunmap_atomic((char *)buf - sg->offset, HPT_KMAP_TYPE);
+#endif
 #else 
 
 	if (cmd->use_sg) {
@@ -874,7 +882,11 @@ static void hpt_scsi_start_stop_done(PCOMMAND pCmd)
 	}
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,37)
 static int hpt_queuecommand (Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
+#else
+static int hpt_queuecommand_lck (Scsi_Cmnd * SCpnt, void (*done) (Scsi_Cmnd *))
+#endif
 {
 	struct Scsi_Host *phost = sc_host(SCpnt);
 	PVBUS_EXT vbus_ext = get_vbus_ext(phost);
@@ -1408,6 +1420,10 @@ cmd_done:
 	return 0;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37)
+static DEF_SCSI_QCMD(hpt_queuecommand)
+#endif
+
 static int hpt_reset (Scsi_Cmnd *SCpnt)
 {
 	PVBUS_EXT vbus_ext = get_vbus_ext(sc_host(SCpnt));
@@ -1789,6 +1805,7 @@ invalid:
 	return -EINVAL;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 static int hpt_proc_info26(struct Scsi_Host *host, char *buffer, char **start,
 					off_t offset, int length, int inout)
 {
@@ -1798,6 +1815,7 @@ static int hpt_proc_info26(struct Scsi_Host *host, char *buffer, char **start,
 	else
 		return hpt_proc_get_info(host, buffer, start, offset, length);
 }
+#endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,5,0)
 static int hpt_proc_info24(char *buffer,char **start, off_t offset,
@@ -2098,7 +2116,12 @@ static Scsi_Host_Template driver_template = {
 	#endif
 #else /* 2.6.x */
 	proc_name:               driver_name,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 	proc_info:               hpt_proc_info26,
+#else
+	show_info:               hpt_proc_show_info,
+	write_info:              hpt_proc_set_info,
+#endif
 	max_sectors:             128,
 #endif
 	this_id:                 -1

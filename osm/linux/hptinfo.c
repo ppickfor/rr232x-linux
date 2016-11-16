@@ -8,6 +8,7 @@
 #include "osm_linux.h"
 #include "hptintf.h"
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 typedef struct _hpt_GET_INFO {
 	char *buffer;
 	int buflength;
@@ -52,6 +53,10 @@ static int hpt_copy_info(HPT_GET_INFO *pinfo, char *fmt, ...)
 	hpt_copy_mem_info(pinfo, buf, len);
 	return len;
 }
+#else // >= KERNEL_VERSION(3,10,0)
+typedef struct seq_file HPT_GET_INFO;
+#define hpt_copy_info seq_printf
+#endif
 
 #define HPT_DO_IOCTL(code, inbuf, insize, outbuf, outsize) ({\
 	IOCTL_ARG arg;\
@@ -181,7 +186,7 @@ static void hpt_dump_devinfo(HPT_GET_INFO *pinfo, DEVICEID id, int indent)
 					devinfo.u.device.ControllerId+1,
 					devinfo.u.device.PathId+1,
 					devinfo.u.device.TargetId+1,
-					devinfo.u.device.IdentifyData.ModelNumber
+					(char*)devinfo.u.device.IdentifyData.ModelNumber
 				);
 		else {
 			memcpy(sn, devinfo.u.device.IdentifyData.SerialNumber,
@@ -193,7 +198,7 @@ static void hpt_dump_devinfo(HPT_GET_INFO *pinfo, DEVICEID id, int indent)
 				(devinfo.u.device.Flags & DEVICE_FLAG_IN_ENCLOSURE) ? "E" : "",
 				devinfo.u.device.PathId+1,
 				devinfo.u.device.TargetId+1,
-				devinfo.u.device.IdentifyData.ModelNumber, sn,
+				(char*)devinfo.u.device.IdentifyData.ModelNumber, sn,
 				(int)(devinfo.Capacity*512/1000000),
 				(devinfo.u.device.Flags & DEVICE_FLAG_DISABLED)? "Disabled" : "Normal",
 				devinfo.u.device.ReadAheadEnabled? "[RA]":"",
@@ -233,15 +238,25 @@ static void hpt_dump_devinfo(HPT_GET_INFO *pinfo, DEVICEID id, int indent)
 }
 
 #define MAX_PHYSICAL_DEVICE	128
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 int hpt_proc_get_info(struct Scsi_Host *host, char *buffer, char **start, off_t offset, int length)
+#else
+int hpt_proc_show_info(struct seq_file *m, struct Scsi_Host *host)
+#endif
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 	HPT_GET_INFO info;
+#else
+#define info (*m)
+#define buffillen count ? 0 : 0
+#endif
 	int i, j, count;
 	CONTROLLER_INFO_V2 conInfo2;
 	DEVICEID *ids;
 	int devs;	
 	PVBUS_EXT vbus_ext = get_vbus_ext(host);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 	info.buffer     = buffer;
 	info.buflength  = length;
 	info.bufoffset  = offset;
@@ -249,6 +264,7 @@ int hpt_proc_get_info(struct Scsi_Host *host, char *buffer, char **start, off_t 
 	info.buffillen  = 0;
 
 	if (start) *start = buffer;
+#endif
 
 	hpt_copy_info(&info, "%s %s\n\n", driver_name_long, driver_ver);
 

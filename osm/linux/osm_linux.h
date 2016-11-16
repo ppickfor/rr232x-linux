@@ -6,10 +6,14 @@
 #ifndef _OSM_LINUX_H
 #define _OSM_LINUX_H
 
+#include <linux/version.h>
+
 /* system headers */
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,38)
 #ifndef AUTOCONF_INCLUDED
 #include <linux/config.h>
+#endif
 #endif
 
 #include <linux/version.h>
@@ -173,7 +177,9 @@ typedef void irqreturn_t;
 #define scsi_set_max_cmd_len(host, len) host->max_cmd_len = len
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,5,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)
+#define HPT_FIND_PCI_DEVICE pci_get_device
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,5,0)
 #define HPT_KMAP_TYPE KM_BIO_SRC_IRQ
 #define HPT_FIND_PCI_DEVICE pci_get_device
 #else 
@@ -289,6 +295,9 @@ VBUS_EXT, *PVBUS_EXT;
 void refresh_sd_flags(PVBUS_EXT vbus_ext);
 void hpt_do_ioctl(IOCTL_ARG *ioctl_args);
 void hpt_stop_tasks(PVBUS_EXT vbus_ext);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 int hpt_proc_get_info(struct Scsi_Host *host, char *buffer, char **start, off_t offset, int length);
-
+#else
+int hpt_proc_show_info(struct seq_file *m, struct Scsi_Host *host);
+#endif
 #endif

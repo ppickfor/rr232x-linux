@@ -198,7 +198,11 @@ void *os_kmap_sgptr(PSG psg)
 
 	if (page)
 		return (PageHighMem(page)?
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)
+				(char *)kmap_atomic(page) :
+#else
 				(char *)kmap_atomic(page, HPT_KMAP_TYPE) :
+#endif
 				(char *)page_address(page))
 			+ (psg->addr.bus & 0xffffffff);
 	else
@@ -208,7 +212,11 @@ void *os_kmap_sgptr(PSG psg)
 void os_kunmap_sgptr(void *ptr)
 {
 	if ((HPT_UPTR)ptr >= (HPT_UPTR)high_memory)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,6,0)
+		kunmap_atomic(ptr);
+#else
 		kunmap_atomic(ptr, HPT_KMAP_TYPE);
+#endif
 }
 #else 
 void *os_kmap_sgptr(PSG psg) { return psg->addr._logical; }
@@ -259,7 +267,9 @@ void refresh_sd_flags(PVBUS_EXT vbus_ext)
 				for (minor=0; minor<=240; minor+=16) {
 					struct block_device *bdev = bdget(MKDEV(major[i], minor));
 					if (bdev &&
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,38)
+						blkdev_get(bdev, FMODE_READ,NULL)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,28)
 						blkdev_get(bdev, FMODE_READ)
 #else 
 						blkdev_get(bdev, FMODE_READ, 0 __BDEV_RAW)
